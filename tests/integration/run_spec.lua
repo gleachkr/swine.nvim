@@ -40,6 +40,16 @@ local function get_namespace(name)
   return vim.api.nvim_get_namespaces()[name]
 end
 
+local function find_mark_by_id(marks, id)
+  for _, mark in ipairs(marks) do
+    if mark[1] == id then
+      return mark
+    end
+  end
+
+  return nil
+end
+
 return {
   ["SwineRun sets diagnostics for load errors"] = function(t)
     require_swipl(t)
@@ -100,6 +110,49 @@ return {
 
       t.contains(joined, "X = alpha")
       t.contains(joined, "X = beta")
+    end)
+  end,
+
+  ["SwineRun supports multiline %| query markers"] = function(t)
+    require_swipl(t)
+
+    with_prolog_buffer(t, {
+      "q_item(alpha).",
+      "q_item(beta).",
+      "%? q_item(X),",
+      "%| X \\= beta.",
+    }, function(buf)
+      swine.run(buf)
+
+      local ns_qres = get_namespace("swine_qres")
+      t.ok(ns_qres ~= nil, "missing swine_qres namespace")
+
+      t.wait_for(function()
+        local marks = t.buf_extmarks(buf, ns_qres)
+        local mark = t.find_mark_by_lnum(marks, 3)
+        return mark ~= nil
+          and mark[4] ~= nil
+          and mark[4].virt_lines ~= nil
+          and #mark[4].virt_lines >= 1
+      end, 4000, 20, "expected query virtual lines")
+
+      local marks = t.buf_extmarks(buf, ns_qres)
+      local mark = t.find_mark_by_lnum(marks, 3)
+      local mark_id = mark[1]
+      local text_lines = t.virt_lines_to_text(mark[4].virt_lines)
+      local joined = table.concat(text_lines, "\n")
+      local line = vim.api.nvim_buf_get_lines(buf, 3, 4, false)[1] or ""
+
+      t.contains(joined, "X = alpha")
+      t.eq(mark[3], #line)
+
+      vim.api.nvim_buf_set_text(buf, 3, 5, 3, 5, { "", "" })
+
+      t.wait_for(function()
+        local moved_marks = t.buf_extmarks(buf, ns_qres)
+        local moved = find_mark_by_id(moved_marks, mark_id)
+        return moved ~= nil and moved[2] == 4
+      end, 1000, 20, "expected query mark to follow split line")
     end)
   end,
 

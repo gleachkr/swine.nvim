@@ -293,6 +293,11 @@ local function parse_query_output(text, obj, timeout_ms)
   return query_output.parse(text, obj, timeout_ms)
 end
 
+local function line_end_col(buf, lnum)
+  local line = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ""
+  return #line
+end
+
 local function render_query_result(buf, lnum, rows, s)
   local text_rows = {}
   local max_width = 0
@@ -317,13 +322,17 @@ local function render_query_result(buf, lnum, rows, s)
     table.insert(virt_lines, make_virt_line(row.text, row.kind, max_width))
   end
 
+  local end_col = line_end_col(buf, lnum)
+  local mark_opts = virt_mark_opts(virt_lines)
+  mark_opts.right_gravity = true
+
   s.query_marks[lnum] = upsert_mark(
     buf,
     ns_qres,
     s.query_marks[lnum],
     lnum,
-    0,
-    virt_mark_opts(virt_lines)
+    end_col,
+    mark_opts
   )
 end
 

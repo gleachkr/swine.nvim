@@ -37,4 +37,63 @@ return {
       { lnum = 2, query = "member(X, [a,b,c])", max_solutions = 3 },
     })
   end,
+
+  ["collects multiline markers with %| continuation"] = function(t)
+    local rows = query_markers.collect_from_lines({
+      "%? member(X, [a,b,c]),",
+      "%| X \\= b,",
+      "%| writeln(X).",
+    }, 50)
+
+    t.eq(rows, {
+      {
+        lnum = 2,
+        query = table.concat({
+          "member(X, [a,b,c]),",
+          "X \\= b,",
+          "writeln(X)",
+        }, "\n"),
+        max_solutions = 1,
+      },
+    })
+  end,
+
+  ["allows blank %| continuation lines"] = function(t)
+    local rows = query_markers.collect_from_lines({
+      "%? member(X, [a,b,c]),",
+      "%|",
+      "%| X \\= b.",
+    }, 50)
+
+    t.eq(rows, {
+      {
+        lnum = 2,
+        query = table.concat({
+          "member(X, [a,b,c]),",
+          "",
+          "X \\= b",
+        }, "\n"),
+        max_solutions = 1,
+      },
+    })
+  end,
+
+  ["allows %? line with continuation-only query"] = function(t)
+    local rows = query_markers.collect_from_lines({
+      "%?",
+      "%| true.",
+    }, 50)
+
+    t.eq(rows, {
+      { lnum = 1, query = "true", max_solutions = 1 },
+    })
+  end,
+
+  ["ignores orphan %| continuation line"] = function(t)
+    local rows = query_markers.collect_from_lines({
+      "%| true.",
+    }, 50)
+
+    t.eq(rows, {})
+  end,
 }

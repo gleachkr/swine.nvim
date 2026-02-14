@@ -59,6 +59,7 @@ Markers are comments, so your file still parses as normal Prolog.
   %?? goal.     Two solutions
   %??? goal.    Three solutions
   %N? goal.     N solutions
+  %| ...        Continuation of prior %?/%??/%N? marker
 
 Example:
 
@@ -66,7 +67,19 @@ Example:
   %? member(X, [a,b,c]).
   %?? member(X, [a,b,c]).
   %5? between(1, 10, N).
+
+  %? member(X, [a,b,c]),
+  %| X \= b,
+  %| writeln(X).
+
+  %? member(X, [a,b,c]),
+  %|
+  %| X \= b.
 <
+
+A continuation block ends at the first non-%| line.
+Results render under the final line of the block.
+The result extmark is anchored at that final line's end column.
 
 ===============================================================================
 COMMANDS                                                   *swine-commands*

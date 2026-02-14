@@ -50,6 +50,27 @@ Use comment markers so source remains valid Prolog:
 - `%?? goal.` → 2 solutions
 - `%??? goal.` → 3 solutions
 - `%N? goal.` → N solutions (example `%5? member(X, [a,b,c,d,e]).`)
+- `%| ...` → continuation line for the most recent `%?`/`%??`/`%N?` marker
+
+Continuation lines let you write multi-line queries:
+
+```prolog
+%? member(X, [a,b,c]),
+%| X \= b,
+%| writeln(X).
+```
+
+Blank continuation lines are allowed:
+
+```prolog
+%? member(X, [a,b,c]),
+%|
+%| X \= b.
+```
+
+A continuation block ends at the first non-`%|` line.
+Results render under the final line of the block.
+The result extmark is anchored at that final line's end column.
 
 ## Commands
 
