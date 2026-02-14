@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/dcf42c46-2d15-490f-9dd5-b3cf14d9a58e
+
 # swine.nvim
 
 SWI Notebook Environment for Neovim.
