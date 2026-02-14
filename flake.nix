@@ -40,8 +40,10 @@
 
         devShells.default = pkgs.mkShell {
           packages = [
-            pkgs.neovim
             pkgs.swi-prolog
+            pkgs.lua-language-server
+            pkgs.stylua
+            pkgs.luajitPackages.luacheck
           ];
         };
       }
