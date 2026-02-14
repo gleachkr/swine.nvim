@@ -1,0 +1,177 @@
+*swine.txt*  SWI Notebook Environment for Neovim
+
+Author: local
+License: MIT (add your preferred license)
+
+===============================================================================
+CONTENTS                                                    *swine-contents*
+
+1. Introduction .................................................. |swine.nvim|
+2. Setup ........................................................ |swine-setup|
+3. Query markers ............................................... |swine-markers|
+4. Commands ................................................... |swine-commands|
+5. Options ..................................................... |swine-options|
+6. Notes ......................................................... |swine-notes|
+
+===============================================================================
+INTRODUCTION                                                  *swine.nvim*
+
+swine.nvim provides a lightweight notebook-like loop for Prolog files.
+
+It:
+  - loads .pl buffers with swipl
+  - shows load errors as diagnostics
+  - evaluates query comments inline
+  - renders results as virtual lines under each query
+
+===============================================================================
+SETUP                                                        *swine-setup*
+
+>lua
+  require("swine").setup({
+    pattern = "*.pl",
+    run_on_save = false,
+    max_solutions = 50,
+    load_timeout_ms = 4000,
+    query_timeout_ms = 4000,
+    virt_lines_bg = "auto",
+    virt_lines_hl = nil,
+    virt_lines_overflow = "scroll",
+    virt_lines_leftcol = true,
+    virt_lines_bar = "▌",
+    virt_lines_pad = true,
+    virt_lines_pad_extra = 1,
+  })
+<
+
+Manual docs install if needed:
+
+>vim
+  :helptags {path-to-repo}/doc
+<
+
+===============================================================================
+QUERY MARKERS                                               *swine-markers*
+
+Markers are comments, so your file still parses as normal Prolog.
+
+  %? goal.      One solution
+  %?? goal.     Two solutions
+  %??? goal.    Three solutions
+  %N? goal.     N solutions
+
+Example:
+
+>prolog
+  %? member(X, [a,b,c]).
+  %?? member(X, [a,b,c]).
+  %5? between(1, 10, N).
+<
+
+===============================================================================
+COMMANDS                                                   *swine-commands*
+
+                                                        *:SwineRun*
+:SwineRun [bufnr]
+        Evaluate one buffer now.
+
+                                                      *:SwineClear*
+:SwineClear [bufnr]
+        Clear diagnostics and virtual lines for one buffer.
+
+                                                 *:SwineToggleAuto*
+:SwineToggleAuto
+        Toggle run-on-save on/off.
+
+===============================================================================
+OPTIONS                                                     *swine-options*
+
+                                                        *swine-pattern*
+pattern                                                    (string, "*.pl")
+        Pattern used by BufWritePost when run_on_save is enabled.
+
+                                                    *swine-run_on_save*
+run_on_save                                              (boolean, false)
+        If true, evaluate matching buffers on save.
+
+                                                 *swine-max_solutions*
+max_solutions                                               (number, 50)
+        Global cap used by %N? query markers.
+
+                                               *swine-load_timeout_ms*
+load_timeout_ms                                           (number, 4000)
+        Timeout in milliseconds for the file load step.
+
+                                              *swine-query_timeout_ms*
+query_timeout_ms                                          (number, 4000)
+        Timeout in milliseconds per inline query.
+
+                                                 *swine-virt_lines_bg*
+virt_lines_bg                                  (string|number|nil, "auto")
+        Background for swine virtual lines.
+
+        "auto" derives a subtle shade from Normal and is the default.
+        nil disables swine background override and uses linked groups as-is.
+
+        Examples:
+          virt_lines_bg = "auto"
+          virt_lines_bg = "#1f2335"
+          virt_lines_bg = "NONE"
+
+                                                 *swine-virt_lines_hl*
+virt_lines_hl                             (string|table|nil, nil)
+        Highlight source groups for swine virtual lines.
+
+        String form applies one group to all severities:
+>lua
+          virt_lines_hl = "Comment"
+<
+        Table form allows all/error/warn/hint/info keys:
+>lua
+          virt_lines_hl = {
+            all = "Comment",
+            error = "DiagnosticVirtualTextError",
+            warn = "DiagnosticVirtualTextWarn",
+            hint = "DiagnosticVirtualTextHint",
+            info = "DiagnosticVirtualTextInfo",
+          }
+<
+        If virt_lines_bg is set, swine preserves fg/style from the chosen
+        groups and only changes background.
+
+                                           *swine-virt_lines_overflow*
+virt_lines_overflow                                (string, "scroll")
+        Passed to extmarks as virt_lines_overflow.
+        Valid values: "scroll" or "trunc".
+
+                                            *swine-virt_lines_leftcol*
+virt_lines_leftcol                                 (boolean, true)
+        Passed to extmarks as virt_lines_leftcol.
+        When true, virtual lines render over sign/number columns.
+
+                                                *swine-virt_lines_bar*
+virt_lines_bar                                     (string, "▌")
+        Optional left marker added to every swine virtual line.
+        Set to "" to disable.
+
+                                                *swine-virt_lines_pad*
+virt_lines_pad                                     (boolean, true)
+        If true, swine appends spaces to each virtual line to extend
+        background highlighting beyond the visible text.
+
+        For multi-line blocks, each line pads to the longest rendered line,
+        so right edges align.
+
+                                          *swine-virt_lines_pad_extra*
+virt_lines_pad_extra                                (number, 1)
+        Extra spaces added after alignment width when virt_lines_pad is
+        enabled. Clamped to [0, 16].
+
+===============================================================================
+NOTES                                                         *swine-notes*
+
+- The plugin currently spawns one swipl process per query marker.
+- Output formatting is practical and may not cover every Prolog edge case.
+- Timeout detection depends on Neovim's vim.system result metadata.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
