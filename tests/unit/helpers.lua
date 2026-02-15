@@ -48,11 +48,7 @@ function M.contains(haystack, needle, msg)
     return
   end
 
-  local detail = msg or string.format(
-    "expected substring %s in %s",
-    render(needle),
-    render(haystack)
-  )
+  local detail = msg or string.format("expected substring %s in %s", render(needle), render(haystack))
   error(detail, 2)
 end
 
@@ -92,13 +88,7 @@ function M.create_file_buffer(path, lines)
 end
 
 function M.buf_extmarks(buf, namespace)
-  return vim.api.nvim_buf_get_extmarks(
-    buf,
-    namespace,
-    0,
-    -1,
-    { details = true }
-  )
+  return vim.api.nvim_buf_get_extmarks(buf, namespace, 0, -1, { details = true })
 end
 
 function M.find_mark_by_lnum(marks, lnum)

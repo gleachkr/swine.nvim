@@ -45,9 +45,7 @@ for _, module_name in ipairs(modules) do
     if msg:find(skip_prefix, 1, true) == 1 then
       skipped = skipped + 1
       msg = msg:sub(#skip_prefix + 1)
-      io.stdout:write(
-        string.format("↷ %s :: %s (%s)\n", module_name, case_name, msg)
-      )
+      io.stdout:write(string.format("↷ %s :: %s (%s)\n", module_name, case_name, msg))
       goto next_case
     end
 
@@ -64,20 +62,10 @@ end
 local passed = total - failed - skipped
 
 if failed > 0 then
-  io.stderr:write(
-    string.format(
-      "\n%d failed, %d passed, %d skipped (%d total)\n",
-      failed,
-      passed,
-      skipped,
-      total
-    )
-  )
+  io.stderr:write(string.format("\n%d failed, %d passed, %d skipped (%d total)\n", failed, passed, skipped, total))
   vim.cmd("cquit 1")
   return
 end
 
-io.stdout:write(
-  string.format("\n%d passed, %d skipped (%d total)\n", passed, skipped, total)
-)
+io.stdout:write(string.format("\n%d passed, %d skipped (%d total)\n", passed, skipped, total))
 vim.cmd.quitall({ bang = true })

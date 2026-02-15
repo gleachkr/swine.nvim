@@ -143,28 +143,14 @@ local function upsert_mark(buf, ns, id, lnum, col, opts)
     payload.id = id
   end
 
-  local ok, new_id = pcall(
-    vim.api.nvim_buf_set_extmark,
-    buf,
-    ns,
-    lnum,
-    col,
-    payload
-  )
+  local ok, new_id = pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum, col, payload)
   if ok then
     return new_id
   end
 
   if id then
     payload.id = nil
-    ok, new_id = pcall(
-      vim.api.nvim_buf_set_extmark,
-      buf,
-      ns,
-      lnum,
-      col,
-      payload
-    )
+    ok, new_id = pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum, col, payload)
     if ok then
       return new_id
     end
@@ -208,8 +194,7 @@ local function render_diags(buf, diags, s)
   local seen = {}
 
   for _, d in ipairs(diags) do
-    local kind = (d.severity == vim.diagnostic.severity.ERROR)
-      and "error" or "warn"
+    local kind = (d.severity == vim.diagnostic.severity.ERROR) and "error" or "warn"
 
     local base = table.concat({
       tostring(d.lnum),
@@ -264,29 +249,25 @@ local function is_timeout_result(obj, text)
 end
 
 local function set_status(buf, msg, kind, s)
-  s.status_mark = upsert_mark(
-    buf,
-    ns_qres,
-    s.status_mark,
-    0,
-    0,
-    virt_mark_opts({ make_virt_line(msg, kind) })
-  )
+  s.status_mark = upsert_mark(buf, ns_qres, s.status_mark, 0, 0, virt_mark_opts({ make_virt_line(msg, kind) }))
 end
 
 local function build_query_goal(max_solutions)
-  return string.format(table.concat({
-    "current_prolog_flag(argv,Argv),",
-    "(Argv=[QAtom|_]->true;QAtom=''),",
-    "catch((",
-    "read_term_from_atom(QAtom,Q,[variable_names(VNs)]),",
-    "findnsols(%d,VNs,Q,Sols),",
-    "(Sols==[]->writeln('PLNB_FALSE');",
-    "forall(nth1(I,Sols,SVNs),",
-    "(SVNs==[]->format('PLNB_SOL ~d true~n',[I]);",
-    "format('PLNB_SOL ~d ~q~n',[I,SVNs]))))",
-    "),E,format('PLNB_ERROR ~q~n',[E]))",
-  }), max_solutions)
+  return string.format(
+    table.concat({
+      "current_prolog_flag(argv,Argv),",
+      "(Argv=[QAtom|_]->true;QAtom=''),",
+      "catch((",
+      "read_term_from_atom(QAtom,Q,[variable_names(VNs)]),",
+      "findnsols(%d,VNs,Q,Sols),",
+      "(Sols==[]->writeln('PLNB_FALSE');",
+      "forall(nth1(I,Sols,SVNs),",
+      "(SVNs==[]->format('PLNB_SOL ~d true~n',[I]);",
+      "format('PLNB_SOL ~d ~q~n',[I,SVNs]))))",
+      "),E,format('PLNB_ERROR ~q~n',[E]))",
+    }),
+    max_solutions
+  )
 end
 
 local function parse_query_output(text, obj, timeout_ms)
@@ -326,14 +307,7 @@ local function render_query_result(buf, lnum, rows, s)
   local mark_opts = virt_mark_opts(virt_lines)
   mark_opts.right_gravity = true
 
-  s.query_marks[lnum] = upsert_mark(
-    buf,
-    ns_qres,
-    s.query_marks[lnum],
-    lnum,
-    end_col,
-    mark_opts
-  )
+  s.query_marks[lnum] = upsert_mark(buf, ns_qres, s.query_marks[lnum], lnum, end_col, mark_opts)
 end
 
 local function run_queries(buf, file, seq, s)
@@ -358,12 +332,7 @@ local function run_queries(buf, file, seq, s)
     return
   end
 
-  set_status(
-    buf,
-    string.format("✓ loaded; running %d queries", #qs),
-    "hint",
-    s
-  )
+  set_status(buf, string.format("✓ loaded; running %d queries", #qs), "hint", s)
 
   for _, item in ipairs(qs) do
     local cmd = {
@@ -558,10 +527,7 @@ local function resolve_bg_value(bg_opt)
     local bg = derive_auto_bg()
     if not bg and not warned_auto_bg then
       warned_auto_bg = true
-      vim.notify(
-        "swine.nvim: could not derive auto background; using defaults",
-        vim.log.levels.WARN
-      )
+      vim.notify("swine.nvim: could not derive auto background; using defaults", vim.log.levels.WARN)
     end
     return bg
   end
@@ -624,14 +590,12 @@ local function define_user_command(name, fn, opts)
 end
 
 local function cmd_run(args)
-  local b = args.args ~= "" and tonumber(args.args)
-    or vim.api.nvim_get_current_buf()
+  local b = args.args ~= "" and tonumber(args.args) or vim.api.nvim_get_current_buf()
   run_for_buf(b)
 end
 
 local function cmd_clear(args)
-  local b = args.args ~= "" and tonumber(args.args)
-    or vim.api.nvim_get_current_buf()
+  local b = args.args ~= "" and tonumber(args.args) or vim.api.nvim_get_current_buf()
   clear_buf(b)
 end
 
@@ -653,10 +617,7 @@ local function parse_virt_lines_hl(raw)
   end
 
   if type(raw) ~= "table" then
-    vim.notify(
-      "swine.nvim: virt_lines_hl must be string, table, or nil",
-      vim.log.levels.WARN
-    )
+    vim.notify("swine.nvim: virt_lines_hl must be string, table, or nil", vim.log.levels.WARN)
     return nil
   end
 
@@ -684,10 +645,7 @@ local function parse_virt_lines_overflow(raw)
     return raw
   end
 
-  vim.notify(
-    "swine.nvim: virt_lines_overflow must be 'scroll' or 'trunc'",
-    vim.log.levels.WARN
-  )
+  vim.notify("swine.nvim: virt_lines_overflow must be 'scroll' or 'trunc'", vim.log.levels.WARN)
   return "scroll"
 end
 
@@ -700,10 +658,7 @@ local function parse_virt_lines_leftcol(raw)
     return raw
   end
 
-  vim.notify(
-    "swine.nvim: virt_lines_leftcol must be boolean",
-    vim.log.levels.WARN
-  )
+  vim.notify("swine.nvim: virt_lines_leftcol must be boolean", vim.log.levels.WARN)
   return true
 end
 
@@ -739,10 +694,7 @@ local function parse_virt_lines_pad_extra(raw)
   end
 
   if type(raw) ~= "number" then
-    vim.notify(
-      "swine.nvim: virt_lines_pad_extra must be a number",
-      vim.log.levels.WARN
-    )
+    vim.notify("swine.nvim: virt_lines_pad_extra must be a number", vim.log.levels.WARN)
     return 1
   end
 
@@ -757,14 +709,8 @@ function M.setup(opts)
     virt_lines_bg = "auto"
   end
 
-  if type(virt_lines_bg) ~= "string"
-    and type(virt_lines_bg) ~= "number"
-    and virt_lines_bg ~= nil
-  then
-    vim.notify(
-      "swine.nvim: virt_lines_bg must be string, number, or nil",
-      vim.log.levels.WARN
-    )
+  if type(virt_lines_bg) ~= "string" and type(virt_lines_bg) ~= "number" and virt_lines_bg ~= nil then
+    vim.notify("swine.nvim: virt_lines_bg must be string, number, or nil", vim.log.levels.WARN)
     virt_lines_bg = "auto"
   end
 
@@ -772,16 +718,8 @@ function M.setup(opts)
     pattern = opts.pattern or "*.pl",
     run_on_save = opts.run_on_save == true,
     max_solutions = clamp(opts.max_solutions or 50, 1, 500),
-    load_timeout_ms = clamp(
-      opts.load_timeout_ms or 4000,
-      MIN_TIMEOUT_MS,
-      MAX_TIMEOUT_MS
-    ),
-    query_timeout_ms = clamp(
-      opts.query_timeout_ms or 4000,
-      MIN_TIMEOUT_MS,
-      MAX_TIMEOUT_MS
-    ),
+    load_timeout_ms = clamp(opts.load_timeout_ms or 4000, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
+    query_timeout_ms = clamp(opts.query_timeout_ms or 4000, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
     virt_lines_bg = virt_lines_bg,
     virt_lines_hl = parse_virt_lines_hl(opts.virt_lines_hl),
     virt_lines_overflow = parse_virt_lines_overflow(opts.virt_lines_overflow),

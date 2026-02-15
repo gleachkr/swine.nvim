@@ -97,10 +97,7 @@ return {
       t.wait_for(function()
         local marks = t.buf_extmarks(buf, ns_qres)
         local mark = t.find_mark_by_lnum(marks, 2)
-        return mark ~= nil
-          and mark[4] ~= nil
-          and mark[4].virt_lines ~= nil
-          and #mark[4].virt_lines >= 2
+        return mark ~= nil and mark[4] ~= nil and mark[4].virt_lines ~= nil and #mark[4].virt_lines >= 2
       end, 4000, 20, "expected query virtual lines")
 
       local marks = t.buf_extmarks(buf, ns_qres)
@@ -130,10 +127,7 @@ return {
       t.wait_for(function()
         local marks = t.buf_extmarks(buf, ns_qres)
         local mark = t.find_mark_by_lnum(marks, 3)
-        return mark ~= nil
-          and mark[4] ~= nil
-          and mark[4].virt_lines ~= nil
-          and #mark[4].virt_lines >= 1
+        return mark ~= nil and mark[4] ~= nil and mark[4].virt_lines ~= nil and #mark[4].virt_lines >= 1
       end, 4000, 20, "expected query virtual lines")
 
       local marks = t.buf_extmarks(buf, ns_qres)
@@ -166,6 +160,7 @@ return {
       local original_system = vim.system
       local load_calls = 0
 
+      ---@diagnostic disable-next-line: duplicate-set-field
       vim.system = function(cmd, _opts, cb)
         local has_query = false
 
@@ -245,6 +240,7 @@ return {
         t.contains(joined, "X = fresh")
       end, debug.traceback)
 
+      ---@diagnostic disable-next-line: duplicate-set-field
       vim.system = original_system
 
       if ok then
