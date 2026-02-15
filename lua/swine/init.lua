@@ -48,6 +48,7 @@ local HL_ATTR_KEYS = {
 M._opts = {
   pattern = "*.pl",
   run_on_save = false,
+  backend = "swi",
   max_solutions = 50,
   load_timeout_ms = 4000,
   query_timeout_ms = 4000,
@@ -62,12 +63,31 @@ M._opts = {
 
 M._hl = {}
 
-local diag_parser = require("swine.diag_parser")
+local backend_registry = require("swine.backend")
 local query_markers = require("swine.query_markers")
-local query_output = require("swine.query_output")
+
+M._backend = assert(backend_registry.resolve("swi"))
 
 local function clamp(v, lo, hi)
   return math.max(lo, math.min(hi, v))
+end
+
+local function split_lines(s)
+  if not s or s == "" then
+    return {}
+  end
+
+  return vim.split(s, "\n", { plain = true, trimempty = true })
+end
+
+local function first_nonempty_line(s)
+  for _, line in ipairs(split_lines(s)) do
+    if line:match("%S") then
+      return line
+    end
+  end
+
+  return nil
 end
 
 local function hl(kind)
@@ -179,7 +199,7 @@ local function clear_buf(buf)
 end
 
 local function parse_diags(file, text)
-  return diag_parser.parse(file, text, "swipl")
+  return M._backend.parse_load_diags(file, text)
 end
 
 local function render_diags(buf, diags, s)
@@ -245,33 +265,15 @@ local function run_cmd(cmd, timeout_ms, cb)
 end
 
 local function is_timeout_result(obj, text)
-  return query_output.is_timeout_result(obj, text)
+  return M._backend.is_timeout_result(obj, text)
 end
 
 local function set_status(buf, msg, kind, s)
   s.status_mark = upsert_mark(buf, ns_qres, s.status_mark, 0, 0, virt_mark_opts({ make_virt_line(msg, kind) }))
 end
 
-local function build_query_goal(max_solutions)
-  return string.format(
-    table.concat({
-      "current_prolog_flag(argv,Argv),",
-      "(Argv=[QAtom|_]->true;QAtom=''),",
-      "catch((",
-      "read_term_from_atom(QAtom,Q,[variable_names(VNs)]),",
-      "findnsols(%d,VNs,Q,Sols),",
-      "(Sols==[]->writeln('PLNB_FALSE');",
-      "forall(nth1(I,Sols,SVNs),",
-      "(SVNs==[]->format('PLNB_SOL ~d true~n',[I]);",
-      "format('PLNB_SOL ~d ~q~n',[I,SVNs]))))",
-      "),E,format('PLNB_ERROR ~q~n',[E]))",
-    }),
-    max_solutions
-  )
-end
-
 local function parse_query_output(text, obj, timeout_ms)
-  return query_output.parse(text, obj, timeout_ms)
+  return M._backend.parse_query_output(text, obj, timeout_ms)
 end
 
 local function line_end_col(buf, lnum)
@@ -335,20 +337,7 @@ local function run_queries(buf, file, seq, s)
   set_status(buf, string.format("✓ loaded; running %d queries", #qs), "hint", s)
 
   for _, item in ipairs(qs) do
-    local cmd = {
-      "swipl",
-      "-q",
-      "-f",
-      "none",
-      "-l",
-      file,
-      "-g",
-      build_query_goal(item.max_solutions),
-      "-t",
-      "halt",
-      "--",
-      item.query,
-    }
+    local cmd = M._backend.build_query_cmd(file, item.query, item.max_solutions)
 
     run_cmd(cmd, opts.query_timeout_ms, function(obj)
       if not vim.api.nvim_buf_is_valid(buf) then
@@ -379,8 +368,8 @@ end
 local function run_for_buf(buf)
   local opts = M._opts
 
-  if vim.fn.exepath("swipl") == "" then
-    vim.notify("swipl not found in PATH", vim.log.levels.ERROR)
+  if not M._backend.is_available() then
+    vim.notify(M._backend.missing_message(), vim.log.levels.ERROR)
     return
   end
 
@@ -403,18 +392,9 @@ local function run_for_buf(buf)
   s.seq = s.seq + 1
   local seq = s.seq
 
-  set_status(buf, "… loading", "info", s)
+  set_status(buf, string.format("… loading (%s)", M._backend.id), "info", s)
 
-  local cmd = {
-    "swipl",
-    "-q",
-    "-f",
-    "none",
-    "-l",
-    file,
-    "-g",
-    "halt",
-  }
+  local cmd = M._backend.build_load_cmd(file)
 
   run_cmd(cmd, opts.load_timeout_ms, function(obj)
     if not vim.api.nvim_buf_is_valid(buf) then
@@ -439,6 +419,14 @@ local function run_for_buf(buf)
     if is_timeout_result(obj, text) then
       clear_query_marks(buf, s)
       local msg = string.format("✗ load timeout after %d ms", opts.load_timeout_ms)
+      set_status(buf, msg, "error", s)
+      return
+    end
+
+    if obj and obj.code and obj.code ~= 0 then
+      clear_query_marks(buf, s)
+      local detail = first_nonempty_line(text) or "backend reported load failure"
+      local msg = string.format("✗ load failed (%d): %s", obj.code, detail)
       set_status(buf, msg, "error", s)
       return
     end
@@ -701,6 +689,16 @@ local function parse_virt_lines_pad_extra(raw)
   return clamp(math.floor(raw), 0, 16)
 end
 
+local function parse_backend(raw)
+  local backend, err = backend_registry.resolve(raw)
+  if backend then
+    return backend
+  end
+
+  vim.notify("swine.nvim: " .. err .. "; falling back to swi", vim.log.levels.WARN)
+  return assert(backend_registry.resolve("swi"))
+end
+
 function M.setup(opts)
   opts = opts or {}
 
@@ -714,9 +712,12 @@ function M.setup(opts)
     virt_lines_bg = "auto"
   end
 
+  local backend = parse_backend(opts.backend)
+
   M._opts = {
     pattern = opts.pattern or "*.pl",
     run_on_save = opts.run_on_save == true,
+    backend = backend.id,
     max_solutions = clamp(opts.max_solutions or 50, 1, 500),
     load_timeout_ms = clamp(opts.load_timeout_ms or 4000, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
     query_timeout_ms = clamp(opts.query_timeout_ms or 4000, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
@@ -728,6 +729,8 @@ function M.setup(opts)
     virt_lines_pad = parse_virt_lines_pad(opts.virt_lines_pad),
     virt_lines_pad_extra = parse_virt_lines_pad_extra(opts.virt_lines_pad_extra),
   }
+
+  M._backend = backend
 
   configure_highlights()
   configure_highlight_autocmd()

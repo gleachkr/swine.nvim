@@ -8,10 +8,11 @@ CONTENTS                                                    *swine-contents*
 
 1. Introduction .................................................. |swine.nvim|
 2. Setup ........................................................ |swine-setup|
-3. Query markers ............................................... |swine-markers|
-4. Commands ................................................... |swine-commands|
-5. Options ..................................................... |swine-options|
-6. Notes ......................................................... |swine-notes|
+3. Backends ................................................... |swine-backend|
+4. Query markers ............................................... |swine-markers|
+5. Commands ................................................... |swine-commands|
+6. Options ..................................................... |swine-options|
+7. Notes ......................................................... |swine-notes|
 
 ===============================================================================
 INTRODUCTION                                                  *swine.nvim*
@@ -19,7 +20,7 @@ INTRODUCTION                                                  *swine.nvim*
 swine.nvim provides a lightweight notebook-like loop for Prolog files.
 
 It:
-  - loads .pl buffers with swipl
+  - loads .pl buffers with a configurable backend
   - shows load errors as diagnostics
   - evaluates query comments inline
   - renders results as virtual lines under each query
@@ -31,6 +32,7 @@ SETUP                                                        *swine-setup*
   require("swine").setup({
     pattern = "*.pl",
     run_on_save = false,
+    backend = "swi",
     max_solutions = 50,
     load_timeout_ms = 4000,
     query_timeout_ms = 4000,
@@ -49,6 +51,32 @@ Manual docs install if needed:
 >vim
   :helptags {path-to-repo}/doc
 <
+
+===============================================================================
+BACKENDS                                                  *swine-backend*
+
+Builtin backend ids:
+
+  - "swi"       (default)
+  - "swipl"     (alias for "swi")
+  - "scryer"    (experimental PoC)
+
+You can pass a custom backend table to `setup({ backend = ... })`.
+
+Required fields:
+
+  - id (string)
+  - label (string)
+  - build_load_cmd(file)
+  - build_query_cmd(file, query, max_solutions)
+
+Optional hooks (defaults are provided where possible):
+
+  - parse_load_diags(file, text)
+  - parse_query_output(text, obj, timeout_ms)
+  - is_timeout_result(obj, text)
+  - is_available()
+  - missing_message()
 
 ===============================================================================
 QUERY MARKERS                                               *swine-markers*
@@ -106,6 +134,10 @@ pattern                                                    (string, "*.pl")
                                                     *swine-run_on_save*
 run_on_save                                              (boolean, false)
         If true, evaluate matching buffers on save.
+
+                                                        *swine-backend-id*
+backend                                             (string|table, "swi")
+        Backend id or backend table used for load/query execution.
 
                                                  *swine-max_solutions*
 max_solutions                                               (number, 50)
@@ -183,7 +215,9 @@ virt_lines_pad_extra                                (number, 1)
 ===============================================================================
 NOTES                                                         *swine-notes*
 
-- The plugin currently spawns one swipl process per query marker.
+- The plugin spawns one backend process per query marker.
+- SWI is currently the best-covered backend in integration tests.
+- Scryer backend support is currently a proof of concept.
 - Output formatting is practical and may not cover every Prolog edge case.
 - Timeout detection depends on Neovim's vim.system result metadata.
 

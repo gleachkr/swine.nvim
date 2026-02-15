@@ -7,9 +7,12 @@ It explains the plugin architecture, where behavior lives, and how tests run.
 
 - `lua/swine/init.lua`: plugin entrypoint, orchestration, commands, extmarks,
   async process handling, and highlight setup.
+- `lua/swine/backend/init.lua`: backend registry and backend option resolver.
+- `lua/swine/backend/swi.lua`: SWI-Prolog backend.
+- `lua/swine/backend/scryer.lua`: Scryer backend PoC.
 - `lua/swine/query_markers.lua`: parses `%?`, `%??`, `%N?`, and `%|`
   continuation blocks.
-- `lua/swine/diag_parser.lua`: parses SWI-Prolog load diagnostics into Neovim
+- `lua/swine/diag_parser.lua`: parses SWI-like load diagnostics into Neovim
   diagnostics.
 - `lua/swine/query_output.lua`: parses query process output into
   renderable rows.
@@ -22,15 +25,33 @@ It explains the plugin architecture, where behavior lives, and how tests run.
 
 `SwineRun` (or `swine.run(buf)`) does this:
 
-1. Validate buffer and `swipl` availability.
-2. Spawn `swipl` to load the file (`-l <file> -g halt`).
-3. Parse load stderr/stdout with `diag_parser.parse`.
+1. Validate buffer and selected backend availability.
+2. Spawn backend load command for the file.
+3. Parse load stderr/stdout with backend `parse_load_diags`.
 4. Render diagnostics and diagnostic virtual lines.
-5. If load has errors or timed out, stop and show status.
+5. If load has errors, timeout, or non-zero code, stop and show status.
 6. Otherwise parse query markers from buffer lines.
-7. Spawn one `swipl` process per query marker.
-8. Parse each query output with `query_output.parse`.
+7. Spawn one backend query process per query marker.
+8. Parse each query output with backend `parse_query_output`.
 9. Render query result virtual lines under each query anchor line.
+
+### Backends
+
+Backends are resolved in `setup({ backend = ... })`.
+
+- Builtin string ids: `"swi"` (default), `"scryer"`.
+- Alias: `"swipl"` resolves to `"swi"`.
+- You can pass a backend table implementing:
+  - `id`, `label`
+  - `build_load_cmd(file)`
+  - `build_query_cmd(file, query, max_solutions)`
+  - `parse_load_diags(file, text)`
+  - `parse_query_output(text, obj, timeout_ms)`
+  - `is_timeout_result(obj, text)`
+  - `is_available()`
+  - `missing_message()`
+
+The registry provides defaults for some optional helpers if omitted.
 
 ### Namespaces and state
 
@@ -69,13 +90,13 @@ Collection behavior:
 
 ### Diagnostics parsing
 
-Implemented in `diag_parser.lua`:
+`diag_parser.lua` currently parses SWI-like formats:
 
-- Parses `ERROR: file:line:col: message`
-- Parses `ERROR: file:line: message`
-- Parses `Warning: file:line: message`
-- Filters to the active file only.
-- Handles SWI thread prefixes like `[Thread main]`.
+- `ERROR: file:line:col: message`
+- `ERROR: file:line: message`
+- `Warning: file:line: message`
+- file filtering to active file
+- optional SWI thread prefixes like `[Thread main]`
 
 Returned diagnostics are 0-based (`lnum`, `col`) for Neovim.
 
@@ -83,8 +104,7 @@ Returned diagnostics are 0-based (`lnum`, `col`) for Neovim.
 
 Implemented in `query_output.lua`.
 
-`init.lua` runs queries using a generated SWI goal that prints
-machine-readable markers:
+Backends are expected to print machine-readable markers:
 
 - `PLNB_SOL <idx> <payload>`
 - `PLNB_FALSE`
@@ -157,10 +177,11 @@ It:
 - `tests/unit/query_markers_spec.lua`: marker parse and multiline collection.
 - `tests/unit/diag_parser_spec.lua`: load error/warning parsing and filtering.
 - `tests/unit/query_output_spec.lua`: machine-marker output parsing behavior.
+- `tests/unit/backend_spec.lua`: backend resolution and backend option wiring.
 
 ### Integration tests
 
-`tests/integration/run_spec.lua` covers end-to-end plugin behavior:
+`tests/integration/run_spec.lua` covers end-to-end plugin behavior for SWI:
 
 - diagnostics appear after load errors
 - query result virtual lines are rendered
@@ -168,7 +189,14 @@ It:
 - extmarks move correctly when the anchor line is edited
 - stale async runs do not overwrite newer run results
 
-Integration tests require `swipl` in `PATH`. If missing, tests skip.
+`tests/integration/scryer_spec.lua` covers Scryer backend behavior:
+
+- diagnostics appear for syntax errors
+- diagnostics appear for singleton variable warnings
+- query result virtual lines are rendered
+- unsatisfied queries render `false`
+
+Integration tests skip if required backend executables are missing from `PATH`.
 
 ### Running tests
 
@@ -186,14 +214,15 @@ nix flake check
 ```
 
 `flake.nix` defines `checks.tests` that runs the same headless command with
-`neovim` and `swi-prolog` provided.
+`neovim`, `swi-prolog`, and `scryer-prolog` provided.
 
 ## Agent notes
 
-- Prefer editing `lua/swine/*.lua`; behavior is mostly centralized in
-  `init.lua`.
+- Prefer editing `lua/swine/*.lua`; behavior is still centralized in
+  `init.lua`, with backend logic in `lua/swine/backend/*`.
 - Keep async race safety intact (`seq` checks in callbacks).
 - If you change marker grammar or output markers, update:
+  - backend output generation/parsing
   - parser module
   - rendering behavior if needed
   - unit tests

@@ -4,11 +4,11 @@ https://github.com/user-attachments/assets/dcf42c46-2d15-490f-9dd5-b3cf14d9a58e
 
 # swine.nvim
 
-SWI Notebook Environment for Neovim.
+SWI Notebook Environment for Neovim. Supports other Prologs too.
 
-`swine.nvim` gives a notebook-style workflow for Prolog files:
+`swine.nvim` gives a notebook-style loop for `.pl` files:
 
-- loads `.pl` files with `swipl`
+- loads files with a selectable Prolog backend
 - shows load errors as diagnostics
 - runs inline query comments
 - renders results as virtual lines under query lines
@@ -21,6 +21,7 @@ Use your plugin manager and call setup:
 require("swine").setup({
   pattern = "*.pl",
   run_on_save = false,
+  backend = "swi", -- "swi" (default), "swipl" alias, or "scryer"
   max_solutions = 50,
   load_timeout_ms = 4000,
   query_timeout_ms = 4000,
@@ -41,6 +42,35 @@ By default, swine pads each virtual line with trailing spaces so the
 background extends beyond the rendered text. For multi-line result blocks,
 padding is aligned to the longest rendered line, then adds
 `virt_lines_pad_extra`.
+
+## Backend support
+
+Builtin backend ids:
+
+- `"swi"` (default)
+- `"swipl"` (alias for `"swi"`)
+- `"scryer"` (experimental PoC)
+
+You can also pass a custom backend table:
+
+```lua
+require("swine").setup({
+  backend = {
+    id = "myprolog",
+    label = "My Prolog",
+    executable = "my-prolog",
+    build_load_cmd = function(file)
+      return { "my-prolog", file, "-g", "halt" }
+    end,
+    build_query_cmd = function(file, query, max_solutions)
+      return { "my-prolog", file, "-g", query }
+    end,
+  },
+})
+```
+
+For custom backends, optional parser hooks fall back to the default
+`query_output` parser where possible.
 
 ## Query markers
 

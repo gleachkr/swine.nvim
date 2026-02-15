@@ -22,6 +22,7 @@
           nativeBuildInputs = [
             pkgs.neovim
             pkgs.swi-prolog
+            pkgs.scryer-prolog
           ];
         } ''
           cd ${self}
@@ -43,6 +44,7 @@
             pkgs.swi-prolog
             pkgs.lua-language-server
             pkgs.stylua
+            pkgs.scryer-prolog
             pkgs.luajitPackages.luacheck
           ];
         };

@@ -4,7 +4,9 @@ local modules = {
   "tests.unit.query_markers_spec",
   "tests.unit.diag_parser_spec",
   "tests.unit.query_output_spec",
+  "tests.unit.backend_spec",
   "tests.integration.run_spec",
+  "tests.integration.scryer_spec",
 }
 
 local function sorted_keys(tbl)
