@@ -50,6 +50,39 @@ local function find_mark_by_id(marks, id)
   return nil
 end
 
+local function virt_text_to_text(virt_text)
+  local out = {}
+
+  for _, chunk in ipairs(virt_text or {}) do
+    table.insert(out, chunk[1])
+  end
+
+  return table.concat(out)
+end
+
+local function find_mark_with_text(t, marks, needle)
+  for _, mark in ipairs(marks) do
+    local details = mark[4]
+
+    if details and details.virt_lines then
+      local text_lines = t.virt_lines_to_text(details.virt_lines)
+      local joined = table.concat(text_lines, "\n")
+      if joined:find(needle, 1, true) then
+        return mark
+      end
+    end
+
+    if details and details.virt_text then
+      local text = virt_text_to_text(details.virt_text)
+      if text:find(needle, 1, true) then
+        return mark
+      end
+    end
+  end
+
+  return nil
+end
+
 return {
   ["SwineRun sets diagnostics for load errors"] = function(t)
     require_swipl(t)
@@ -81,6 +114,25 @@ return {
     end)
   end,
 
+  ["SwineRun renders status as virt_text on first buffer line"] = function(t)
+    require_swipl(t)
+
+    with_prolog_buffer(t, {
+      "ready.",
+    }, function(buf)
+      swine.run(buf)
+
+      local ns_qres = get_namespace("swine_qres")
+      t.ok(ns_qres ~= nil, "missing swine_qres namespace")
+
+      t.wait_for(function()
+        local marks = t.buf_extmarks(buf, ns_qres)
+        local mark = find_mark_with_text(t, marks, "✓ loaded")
+        return mark ~= nil and mark[2] == 0 and mark[4] and mark[4].virt_text ~= nil
+      end, 4000, 20, "expected status virt_text on first buffer line")
+    end)
+  end,
+
   ["SwineRun renders query result virtual lines"] = function(t)
     require_swipl(t)
 
@@ -107,6 +159,40 @@ return {
 
       t.contains(joined, "X = alpha")
       t.contains(joined, "X = beta")
+    end)
+  end,
+
+  ["query result cell moves up when deleting line above it"] = function(t)
+    require_swipl(t)
+
+    with_prolog_buffer(t, {
+      "q_item(alpha).",
+      "%? q_item(X).",
+      "after_query_line.",
+    }, function(buf)
+      swine.run(buf)
+
+      local ns_qres = get_namespace("swine_qres")
+      t.ok(ns_qres ~= nil, "missing swine_qres namespace")
+
+      local query_mark
+
+      t.wait_for(function()
+        local marks = t.buf_extmarks(buf, ns_qres)
+        query_mark = find_mark_with_text(t, marks, "X = alpha")
+        return query_mark ~= nil and query_mark[4] and query_mark[4].virt_lines_above == true
+      end, 4000, 20, "expected query virtual lines anchored above next line")
+
+      local mark_id = query_mark[1]
+      local original_lnum = query_mark[2]
+
+      vim.api.nvim_buf_set_lines(buf, 1, 2, false, {})
+
+      t.wait_for(function()
+        local marks = t.buf_extmarks(buf, ns_qres)
+        local moved = find_mark_by_id(marks, mark_id)
+        return moved ~= nil and moved[2] == (original_lnum - 1)
+      end, 1000, 20, "expected query mark to shift up after deleting line above")
     end)
   end,
 

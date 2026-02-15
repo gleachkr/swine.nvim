@@ -122,13 +122,35 @@ local function make_virt_line(text, kind, target_width)
   }
 end
 
-local function virt_mark_opts(lines)
+local function make_status_virt_text(text, kind)
+  local group = hl(kind)
+  local bar = M._opts.virt_lines_bar
+
+  if type(bar) == "string" and bar ~= "" then
+    return {
+      { bar .. " ", group },
+      { text, group },
+    }
+  end
+
   return {
+    { text, group },
+  }
+end
+
+local function virt_mark_opts(lines, overrides)
+  local opts = {
     virt_lines = lines,
     virt_lines_above = false,
     virt_lines_leftcol = M._opts.virt_lines_leftcol,
     virt_lines_overflow = M._opts.virt_lines_overflow,
   }
+
+  for key, value in pairs(overrides or {}) do
+    opts[key] = value
+  end
+
+  return opts
 end
 
 local function get_buf_state(buf)
@@ -269,7 +291,11 @@ local function is_timeout_result(obj, text)
 end
 
 local function set_status(buf, msg, kind, s)
-  s.status_mark = upsert_mark(buf, ns_qres, s.status_mark, 0, 0, virt_mark_opts({ make_virt_line(msg, kind) }))
+  s.status_mark = upsert_mark(buf, ns_qres, s.status_mark, 0, 0, {
+    virt_text = make_status_virt_text(msg, kind),
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+  })
 end
 
 local function parse_query_output(text, obj, timeout_ms)
@@ -279,6 +305,22 @@ end
 local function line_end_col(buf, lnum)
   local line = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ""
   return #line
+end
+
+local function resolve_query_mark_anchor(buf, lnum)
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  local next_lnum = lnum + 1
+
+  if next_lnum < line_count then
+    return next_lnum, 0, {
+      virt_lines_above = true,
+      right_gravity = false,
+    }
+  end
+
+  return lnum, line_end_col(buf, lnum), {
+    right_gravity = true,
+  }
 end
 
 local function render_query_result(buf, lnum, rows, s)
@@ -305,11 +347,10 @@ local function render_query_result(buf, lnum, rows, s)
     table.insert(virt_lines, make_virt_line(row.text, row.kind, max_width))
   end
 
-  local end_col = line_end_col(buf, lnum)
-  local mark_opts = virt_mark_opts(virt_lines)
-  mark_opts.right_gravity = true
+  local mark_lnum, mark_col, overrides = resolve_query_mark_anchor(buf, lnum)
+  local mark_opts = virt_mark_opts(virt_lines, overrides)
 
-  s.query_marks[lnum] = upsert_mark(buf, ns_qres, s.query_marks[lnum], lnum, end_col, mark_opts)
+  s.query_marks[lnum] = upsert_mark(buf, ns_qres, s.query_marks[lnum], mark_lnum, mark_col, mark_opts)
 end
 
 local function run_queries(buf, file, seq, s)

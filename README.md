@@ -100,7 +100,9 @@ Blank continuation lines are allowed:
 
 A continuation block ends at the first non-`%|` line.
 Results render under the final line of the block.
-The result extmark is anchored at that final line's end column.
+When there is a following buffer line, swine anchors virtual lines above that
+next line so query cells move like normal lines when editing nearby text.
+At EOF, anchoring falls back to the final query line end column.
 
 ## Commands
 

@@ -59,12 +59,12 @@ The registry provides defaults for some optional helpers if omitted.
 
 - `swine_diag`: Neovim diagnostics namespace.
 - `swine_virt`: virtual lines for load diagnostics.
-- `swine_qres`: status and query result virtual lines.
+- `swine_qres`: status extmark plus query result virtual lines.
 
 Per-buffer state is stored in a local `state[buf]` table with:
 
 - `seq`: run sequence number used for stale async result rejection.
-- `status_mark`: extmark id for the top status line.
+- `status_mark`: extmark id for top-of-buffer status `virt_text`.
 - `diag_marks`: extmark ids keyed by diagnostic identity.
 - `query_marks`: extmark ids keyed by anchor line number.
 
@@ -86,7 +86,10 @@ Collection behavior:
 - Blank `%|` lines are preserved as blank lines in the assembled query.
 - A block ends at the first non-`%|` line.
 - Trailing `.` is stripped from the assembled query.
-- Result extmarks are anchored to the final line in the block, at line end.
+- Result extmarks render under the final line in the block.
+- When there is a following buffer line, marks are anchored above that next
+  line so virtual cells move up/down like normal lines on surrounding edits.
+- At EOF, marks fall back to the final query line end column anchor.
 
 ### Diagnostics parsing
 
@@ -185,8 +188,9 @@ It:
 
 - diagnostics appear after load errors
 - query result virtual lines are rendered
-- multiline `%|` markers anchor extmarks on final line end column
-- extmarks move correctly when the anchor line is edited
+- multiline `%|` markers render query results from the final marker line
+- query result extmarks move correctly when nearby lines are edited
+- status text is rendered via `virt_text` on the first buffer line
 - stale async runs do not overwrite newer run results
 
 `tests/integration/scryer_spec.lua` covers Scryer backend behavior:
