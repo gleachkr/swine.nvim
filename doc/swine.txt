@@ -87,7 +87,8 @@ Markers are comments, so your file still parses as normal Prolog.
   %?? goal.     Two solutions
   %??? goal.    Three solutions
   %N? goal.     N solutions
-  %| ...        Continuation of prior %?/%??/%N? marker
+  %! goal.      One solution + include side-effect output text
+  %| ...        Continuation of prior %?/%??/%N?/%! marker
 
 Example:
 
@@ -99,6 +100,11 @@ Example:
   %? member(X, [a,b,c]),
   %| X \= b,
   %| writeln(X).
+
+  %! license.
+
+  %! renders side-effect output in chunks with section headers
+  %! "⇒ stdout"/"⇒ stderr", then inserts "⇒ result" before query rows.
 
   %? member(X, [a,b,c]),
   %|

@@ -7,9 +7,15 @@ local M = {
   executable = "swipl",
 }
 
-local function build_query_goal(max_solutions)
+local function build_query_goal(max_solutions, include_output)
+  local verbose_setup = ""
+  if include_output then
+    verbose_setup = "set_prolog_flag(verbose,normal),"
+  end
+
   return string.format(
     table.concat({
+      "%s",
       "current_prolog_flag(argv,Argv),",
       "(Argv=[QAtom|_]->true;QAtom=''),",
       "catch((",
@@ -21,6 +27,7 @@ local function build_query_goal(max_solutions)
       "format('PLNB_SOL ~d ~q~n',[I,SVNs]))))",
       "),E,format('PLNB_ERROR ~q~n',[E]))",
     }),
+    verbose_setup,
     max_solutions
   )
 end
@@ -50,7 +57,9 @@ function M.parse_load_diags(file, text)
   return diag_parser.parse(file, text, M.executable)
 end
 
-function M.build_query_cmd(file, query, max_solutions)
+function M.build_query_cmd(file, query, max_solutions, opts)
+  local include_output = type(opts) == "table" and opts.include_output == true
+
   return {
     M.executable,
     "-q",
@@ -59,7 +68,7 @@ function M.build_query_cmd(file, query, max_solutions)
     "-l",
     file,
     "-g",
-    build_query_goal(max_solutions),
+    build_query_goal(max_solutions, include_output),
     "-t",
     "halt",
     "--",
@@ -67,8 +76,8 @@ function M.build_query_cmd(file, query, max_solutions)
   }
 end
 
-function M.parse_query_output(text, obj, timeout_ms)
-  return query_output.parse(text, obj, timeout_ms)
+function M.parse_query_output(text, obj, timeout_ms, parse_opts)
+  return query_output.parse(text, obj, timeout_ms, parse_opts)
 end
 
 function M.is_timeout_result(obj, text)

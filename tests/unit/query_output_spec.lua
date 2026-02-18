@@ -35,6 +35,57 @@ return {
     })
   end,
 
+  ["ignores side-effect output by default"] = function(t)
+    local text = table.concat({
+      "side effect line",
+      "PLNB_SOL 1 ['X'=a]",
+    }, "\n")
+
+    local rows = query_output.parse(text, { code = 0 }, 4000)
+    t.eq(rows, {
+      { text = "X = a", kind = "hint" },
+    })
+  end,
+
+  ["includes stdout section when requested"] = function(t)
+    local stdout = table.concat({
+      "side effect line",
+      "PLNB_SOL 1 ['X'=a]",
+    }, "\n")
+
+    local rows = query_output.parse(stdout, { code = 0 }, 4000, {
+      include_output = true,
+      stdout = stdout,
+      stderr = "",
+    })
+
+    t.eq(rows, {
+      { text = "stdout", kind = "info", lead = true },
+      { text = "side effect line", kind = "info" },
+      { text = "result", kind = "info", lead = true },
+      { text = "X = a", kind = "hint" },
+    })
+  end,
+
+  ["includes stderr section when requested"] = function(t)
+    local stdout = "PLNB_SOL 1 ['X'=a]"
+    local stderr = "warning line"
+    local text = stdout .. "\n" .. stderr
+
+    local rows = query_output.parse(text, { code = 0 }, 4000, {
+      include_output = true,
+      stdout = stdout,
+      stderr = stderr,
+    })
+
+    t.eq(rows, {
+      { text = "stderr", kind = "warn", lead = true },
+      { text = "warning line", kind = "warn" },
+      { text = "result", kind = "info", lead = true },
+      { text = "X = a", kind = "hint" },
+    })
+  end,
+
   ["reports timeout"] = function(t)
     local rows = query_output.parse("", { code = 124 }, 4000)
     t.eq(rows, {

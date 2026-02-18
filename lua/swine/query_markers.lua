@@ -10,16 +10,21 @@ local function parse_start_marker(line, hard_max)
   local n_raw, q_num = line:match("^%s*%%(%d+)%?%s*(.-)%s*$")
   if n_raw then
     local n = clamp(tonumber(n_raw) or 1, 1, limit)
-    return q_num, n
+    return q_num, n, false
   end
 
   local marks, q_marks = line:match("^%s*%%(%?+)%s*(.-)%s*$")
   if marks then
     local n = clamp(#marks, 1, limit)
-    return q_marks, n
+    return q_marks, n, false
   end
 
-  return nil, nil
+  local q_output = line:match("^%s*%%!%s*(.-)%s*$")
+  if q_output ~= nil then
+    return q_output, 1, true
+  end
+
+  return nil, nil, nil
 end
 
 local function parse_continuation_marker(line)
@@ -43,17 +48,17 @@ local function finalize_query(parts)
 end
 
 function M.parse(line, hard_max)
-  local query, n = parse_start_marker(line, hard_max)
+  local query, n, include_output = parse_start_marker(line, hard_max)
   if query == nil then
-    return nil, nil
+    return nil, nil, nil
   end
 
   query = finalize_query({ query })
   if query == nil then
-    return nil, nil
+    return nil, nil, nil
   end
 
-  return query, n
+  return query, n, include_output
 end
 
 function M.collect_from_lines(lines, hard_max)
@@ -62,7 +67,7 @@ function M.collect_from_lines(lines, hard_max)
   local i = 1
 
   while i <= #lines do
-    local query, max_solutions = parse_start_marker(lines[i], limit)
+    local query, max_solutions, include_output = parse_start_marker(lines[i], limit)
     if query == nil then
       i = i + 1
       goto continue
@@ -91,6 +96,7 @@ function M.collect_from_lines(lines, hard_max)
         lnum = last_lnum,
         query = full_query,
         max_solutions = max_solutions,
+        include_output = include_output and true or nil,
       })
     end
 

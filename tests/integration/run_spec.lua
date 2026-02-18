@@ -162,6 +162,65 @@ return {
     end)
   end,
 
+  ["SwineRun renders side-effect text for %! markers"] = function(t)
+    require_swipl(t)
+
+    with_prolog_buffer(t, {
+      "say_hi :- writeln('hi from side effect').",
+      "%! say_hi.",
+    }, function(buf)
+      swine.run(buf)
+
+      local ns_qres = get_namespace("swine_qres")
+      t.ok(ns_qres ~= nil, "missing swine_qres namespace")
+
+      t.wait_for(function()
+        local marks = t.buf_extmarks(buf, ns_qres)
+        local mark = t.find_mark_by_lnum(marks, 1)
+        return mark ~= nil and mark[4] ~= nil and mark[4].virt_lines ~= nil and #mark[4].virt_lines >= 2
+      end, 4000, 20, "expected %! query virtual lines")
+
+      local marks = t.buf_extmarks(buf, ns_qres)
+      local mark = t.find_mark_by_lnum(marks, 1)
+      local text_lines = t.virt_lines_to_text(mark[4].virt_lines)
+      local joined = table.concat(text_lines, "\n")
+
+      t.contains(joined, "⇒ stdout")
+      t.contains(joined, "hi from side effect")
+      t.contains(joined, "⇒ result")
+      t.contains(joined, "true")
+    end)
+  end,
+
+  ["SwineRun %! renders message output for license/0"] = function(t)
+    require_swipl(t)
+
+    with_prolog_buffer(t, {
+      "%! license.",
+    }, function(buf)
+      swine.run(buf)
+
+      local ns_qres = get_namespace("swine_qres")
+      t.ok(ns_qres ~= nil, "missing swine_qres namespace")
+
+      t.wait_for(function()
+        local marks = t.buf_extmarks(buf, ns_qres)
+        local mark = find_mark_with_text(t, marks, "Simplified BSD license")
+        return mark ~= nil
+      end, 4000, 20, "expected license text in %! output")
+
+      local marks = t.buf_extmarks(buf, ns_qres)
+      local mark = find_mark_with_text(t, marks, "Simplified BSD license")
+      local text_lines = t.virt_lines_to_text(mark[4].virt_lines)
+      local joined = table.concat(text_lines, "\n")
+
+      t.contains(joined, "⇒ stderr")
+      t.contains(joined, "Simplified BSD license")
+      t.contains(joined, "⇒ result")
+      t.contains(joined, "true")
+    end)
+  end,
+
   ["query result cell moves up when deleting line above it"] = function(t)
     require_swipl(t)
 

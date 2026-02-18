@@ -298,8 +298,8 @@ local function set_status(buf, msg, kind, s)
   })
 end
 
-local function parse_query_output(text, obj, timeout_ms)
-  return M._backend.parse_query_output(text, obj, timeout_ms)
+local function parse_query_output(text, obj, timeout_ms, parse_opts)
+  return M._backend.parse_query_output(text, obj, timeout_ms, parse_opts)
 end
 
 local function line_end_col(buf, lnum)
@@ -328,7 +328,8 @@ local function render_query_result(buf, lnum, rows, s)
   local max_width = 0
 
   for i, row in ipairs(rows) do
-    local prefix = (i == 1) and "⇒ " or "  "
+    local lead = row.lead == true or i == 1
+    local prefix = lead and "⇒ " or "  "
     local text = prefix .. row.text
     local width = vim.fn.strdisplaywidth(text)
 
@@ -370,7 +371,7 @@ local function run_queries(buf, file, seq, s)
   end
 
   if #qs == 0 then
-    local hint = "✓ loaded (no %?/%??/%N? queries)"
+    local hint = "✓ loaded (no %?/%??/%N?/%! queries)"
     set_status(buf, hint, "hint", s)
     return
   end
@@ -378,7 +379,8 @@ local function run_queries(buf, file, seq, s)
   set_status(buf, string.format("✓ loaded; running %d queries", #qs), "hint", s)
 
   for _, item in ipairs(qs) do
-    local cmd = M._backend.build_query_cmd(file, item.query, item.max_solutions)
+    local include_output = item.include_output == true
+    local cmd = M._backend.build_query_cmd(file, item.query, item.max_solutions, { include_output = include_output })
 
     run_cmd(cmd, opts.query_timeout_ms, function(obj)
       if not vim.api.nvim_buf_is_valid(buf) then
@@ -390,7 +392,11 @@ local function run_queries(buf, file, seq, s)
       end
 
       local text = (obj.stdout or "") .. "\n" .. (obj.stderr or "")
-      local rows = parse_query_output(text, obj, opts.query_timeout_ms)
+      local rows = parse_query_output(text, obj, opts.query_timeout_ms, {
+        include_output = item.include_output == true,
+        stdout = obj.stdout,
+        stderr = obj.stderr,
+      })
       render_query_result(buf, item.lnum, rows, s)
     end)
   end

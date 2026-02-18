@@ -10,8 +10,8 @@ It explains the plugin architecture, where behavior lives, and how tests run.
 - `lua/swine/backend/init.lua`: backend registry and backend option resolver.
 - `lua/swine/backend/swi.lua`: SWI-Prolog backend.
 - `lua/swine/backend/scryer.lua`: Scryer backend PoC.
-- `lua/swine/query_markers.lua`: parses `%?`, `%??`, `%N?`, and `%|`
-  continuation blocks.
+- `lua/swine/query_markers.lua`: parses `%?`, `%??`, `%N?`, `%!`, and
+  `%|` continuation blocks.
 - `lua/swine/diag_parser.lua`: parses SWI-like load diagnostics into Neovim
   diagnostics.
 - `lua/swine/query_output.lua`: parses query process output into
@@ -78,6 +78,7 @@ Implemented in `query_markers.lua`:
 - `%? goal.` -> max 1 solution
 - `%?? goal.` -> max 2 solutions (or count of question marks)
 - `%N? goal.` -> max N solutions
+- `%! goal.` -> max 1 solution and include side-effect output text
 - `%| ...` -> continuation line for the most recent query marker
 
 Collection behavior:
@@ -113,8 +114,9 @@ Backends are expected to print machine-readable markers:
 - `PLNB_FALSE`
 - `PLNB_ERROR <term>`
 
-`query_output.parse` maps these to rows of `{ text, kind }` where `kind` is
-`hint`, `warn`, or `error`, then the renderer applies highlight groups.
+`query_output.parse` maps these to rows of `{ text, kind, lead? }` where
+`kind` is `hint`, `warn`, `error`, or `info`. `lead = true` marks section
+header rows that should render with the leading `⇒` prefix.
 
 ### Rendering and highlights
 

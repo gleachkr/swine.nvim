@@ -80,7 +80,9 @@ Use comment markers so source remains valid Prolog:
 - `%?? goal.` → 2 solutions
 - `%??? goal.` → 3 solutions
 - `%N? goal.` → N solutions (example `%5? member(X, [a,b,c,d,e]).`)
-- `%| ...` → continuation line for the most recent `%?`/`%??`/`%N?` marker
+- `%! goal.` → 1 solution + include side-effect text from query output
+- `%| ...` → continuation line for the most recent `%?`/`%??`/`%N?`/`%!`
+  marker
 
 Continuation lines let you write multi-line queries:
 
@@ -89,6 +91,15 @@ Continuation lines let you write multi-line queries:
 %| X \= b,
 %| writeln(X).
 ```
+
+`%!` is useful for goals with output side effects:
+
+```prolog
+%! license.
+```
+
+For `%!`, swine adds section headers (`⇒ stdout`, `⇒ stderr`) before each
+output chunk, then inserts `⇒ result` before the normal query result rows.
 
 Blank continuation lines are allowed:
 

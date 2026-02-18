@@ -48,8 +48,8 @@ local function with_defaults(raw)
   end
 
   if type(backend.parse_query_output) ~= "function" then
-    backend.parse_query_output = function(text, obj, timeout_ms)
-      return query_output.parse(text, obj, timeout_ms)
+    backend.parse_query_output = function(text, obj, timeout_ms, parse_opts)
+      return query_output.parse(text, obj, timeout_ms, parse_opts)
     end
   end
 

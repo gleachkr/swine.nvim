@@ -186,8 +186,8 @@ function M.build_query_cmd(file, query, max_solutions)
   }
 end
 
-function M.parse_query_output(text, obj, timeout_ms)
-  return query_output.parse(text, obj, timeout_ms)
+function M.parse_query_output(text, obj, timeout_ms, parse_opts)
+  return query_output.parse(text, obj, timeout_ms, parse_opts)
 end
 
 function M.is_timeout_result(obj, text)

@@ -19,6 +19,13 @@ return {
     t.eq(n, 10)
   end,
 
+  ["parses %! markers"] = function(t)
+    local q, n, include_output = query_markers.parse("%! license.", 50)
+    t.eq(q, "license")
+    t.eq(n, 1)
+    t.eq(include_output, true)
+  end,
+
   ["ignores invalid markers"] = function(t)
     local q, n = query_markers.parse("%?", 50)
     t.is_nil(q)
@@ -35,6 +42,21 @@ return {
     t.eq(rows, {
       { lnum = 0, query = "true", max_solutions = 1 },
       { lnum = 2, query = "member(X, [a,b,c])", max_solutions = 3 },
+    })
+  end,
+
+  ["collects %! markers with output flag"] = function(t)
+    local rows = query_markers.collect_from_lines({
+      "%! license.",
+    }, 50)
+
+    t.eq(rows, {
+      {
+        lnum = 0,
+        query = "license",
+        max_solutions = 1,
+        include_output = true,
+      },
     })
   end,
 
