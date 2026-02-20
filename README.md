@@ -25,6 +25,7 @@ require("swine").setup({
   max_solutions = 50,
   load_timeout_ms = 4000,
   query_timeout_ms = 4000,
+  query_stale_ms = 500,
   virt_lines_bg = "auto",
   virt_lines_hl = nil,
   virt_lines_overflow = "scroll",
@@ -42,6 +43,10 @@ By default, swine pads each virtual line with trailing spaces so the
 background extends beyond the rendered text. For multi-line result blocks,
 padding is aligned to the longest rendered line, then adds
 `virt_lines_pad_extra`.
+
+When a query from a new run is still pending after `query_stale_ms`, swine
+dims that query's existing result cell. This helps show stale output without
+adding extra "running" rows. Set `query_stale_ms = 0` to disable dimming.
 
 ## Backend support
 

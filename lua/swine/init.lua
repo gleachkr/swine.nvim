@@ -27,6 +27,9 @@ local CUSTOM_HL = {
   info = "SwineVirtInfo",
 }
 
+local DEFAULT_STALE_HL = "Comment"
+local CUSTOM_STALE_HL = "SwineVirtStale"
+
 local HL_ATTR_KEYS = {
   "fg",
   "bg",
@@ -52,6 +55,7 @@ M._opts = {
   max_solutions = 50,
   load_timeout_ms = 4000,
   query_timeout_ms = 4000,
+  query_stale_ms = 500,
   virt_lines_bg = "auto",
   virt_lines_hl = nil,
   virt_lines_overflow = "scroll",
@@ -90,7 +94,11 @@ local function first_nonempty_line(s)
   return nil
 end
 
-local function hl(kind)
+local function hl(kind, stale)
+  if stale then
+    return M._hl.stale or DEFAULT_STALE_HL
+  end
+
   return M._hl[kind] or DEFAULT_HL[kind] or "Normal"
 end
 
@@ -105,8 +113,8 @@ local function pad_virtual_text(text, target_width)
   return text .. string.rep(" ", pad)
 end
 
-local function make_virt_line(text, kind, target_width)
-  local group = hl(kind)
+local function make_virt_line(text, kind, target_width, stale)
+  local group = hl(kind, stale)
   local body = pad_virtual_text(text, target_width)
   local bar = M._opts.virt_lines_bar
 
@@ -161,6 +169,10 @@ local function get_buf_state(buf)
       status_mark = nil,
       diag_marks = {},
       query_marks = {},
+      query_rows = {},
+      pending_queries = {},
+      pending_tokens = {},
+      pending_token_seq = 0,
     }
     state[buf] = s
     return s
@@ -168,6 +180,10 @@ local function get_buf_state(buf)
 
   s.diag_marks = s.diag_marks or {}
   s.query_marks = s.query_marks or {}
+  s.query_rows = s.query_rows or {}
+  s.pending_queries = s.pending_queries or {}
+  s.pending_tokens = s.pending_tokens or {}
+  s.pending_token_seq = s.pending_token_seq or 0
   return s
 end
 
@@ -205,6 +221,9 @@ local function clear_query_marks(buf, s)
   for lnum, id in pairs(s.query_marks) do
     del_mark(buf, ns_qres, id)
     s.query_marks[lnum] = nil
+    s.query_rows[lnum] = nil
+    s.pending_queries[lnum] = nil
+    s.pending_tokens[lnum] = nil
   end
 end
 
@@ -218,6 +237,10 @@ local function clear_buf(buf)
   s.status_mark = nil
   s.diag_marks = {}
   s.query_marks = {}
+  s.query_rows = {}
+  s.pending_queries = {}
+  s.pending_tokens = {}
+  s.pending_token_seq = 0
 end
 
 local function parse_diags(file, text)
@@ -323,7 +346,14 @@ local function resolve_query_mark_anchor(buf, lnum)
   }
 end
 
-local function render_query_result(buf, lnum, rows, s)
+local function render_query_result(buf, lnum, rows, s, render_opts)
+  render_opts = render_opts or {}
+  local stale = render_opts.stale == true
+
+  if render_opts.store ~= false then
+    s.query_rows[lnum] = vim.deepcopy(rows)
+  end
+
   local text_rows = {}
   local max_width = 0
 
@@ -345,7 +375,7 @@ local function render_query_result(buf, lnum, rows, s)
 
   local virt_lines = {}
   for _, row in ipairs(text_rows) do
-    table.insert(virt_lines, make_virt_line(row.text, row.kind, max_width))
+    table.insert(virt_lines, make_virt_line(row.text, row.kind, max_width, stale))
   end
 
   local mark_lnum, mark_col, overrides = resolve_query_mark_anchor(buf, lnum)
@@ -354,10 +384,63 @@ local function render_query_result(buf, lnum, rows, s)
   s.query_marks[lnum] = upsert_mark(buf, ns_qres, s.query_marks[lnum], mark_lnum, mark_col, mark_opts)
 end
 
+local function next_pending_token(s)
+  s.pending_token_seq = s.pending_token_seq + 1
+  return s.pending_token_seq
+end
+
+local function clear_query_pending(s, lnum)
+  s.pending_queries[lnum] = nil
+  s.pending_tokens[lnum] = nil
+end
+
+local function schedule_query_stale(buf, lnum, seq, s)
+  s.pending_queries[lnum] = seq
+  local token = next_pending_token(s)
+  s.pending_tokens[lnum] = token
+
+  local stale_ms = M._opts.query_stale_ms or 0
+  if stale_ms <= 0 then
+    return
+  end
+
+  vim.defer_fn(function()
+    if not vim.api.nvim_buf_is_valid(buf) then
+      return
+    end
+
+    local cur = state[buf]
+    if not cur or cur.seq ~= seq then
+      return
+    end
+
+    if cur.pending_queries[lnum] ~= seq then
+      return
+    end
+
+    if cur.pending_tokens[lnum] ~= token then
+      return
+    end
+
+    local rows = cur.query_rows[lnum]
+    if not rows or vim.tbl_isempty(rows) then
+      return
+    end
+
+    render_query_result(buf, lnum, rows, cur, {
+      stale = true,
+      store = false,
+    })
+  end, stale_ms)
+end
+
 local function run_queries(buf, file, seq, s)
   local opts = M._opts
   local qs = collect_queries(buf, opts)
   local keep = {}
+
+  s.pending_queries = {}
+  s.pending_tokens = {}
 
   for _, item in ipairs(qs) do
     keep[item.lnum] = true
@@ -367,6 +450,9 @@ local function run_queries(buf, file, seq, s)
     if not keep[lnum] then
       del_mark(buf, ns_qres, id)
       s.query_marks[lnum] = nil
+      s.query_rows[lnum] = nil
+      s.pending_queries[lnum] = nil
+      s.pending_tokens[lnum] = nil
     end
   end
 
@@ -382,6 +468,8 @@ local function run_queries(buf, file, seq, s)
     local include_output = item.include_output == true
     local cmd = M._backend.build_query_cmd(file, item.query, item.max_solutions, { include_output = include_output })
 
+    schedule_query_stale(buf, item.lnum, seq, s)
+
     run_cmd(cmd, opts.query_timeout_ms, function(obj)
       if not vim.api.nvim_buf_is_valid(buf) then
         return
@@ -391,9 +479,11 @@ local function run_queries(buf, file, seq, s)
         return
       end
 
+      clear_query_pending(s, item.lnum)
+
       local text = (obj.stdout or "") .. "\n" .. (obj.stderr or "")
       local rows = parse_query_output(text, obj, opts.query_timeout_ms, {
-        include_output = item.include_output == true,
+        include_output = include_output,
         stdout = obj.stdout,
         stderr = obj.stderr,
       })
@@ -602,6 +692,19 @@ local function configure_highlights()
 
     ::continue::
   end
+
+  if not bg then
+    vim.api.nvim_set_hl(0, CUSTOM_STALE_HL, { link = DEFAULT_STALE_HL })
+    M._hl.stale = CUSTOM_STALE_HL
+    return
+  end
+
+  local stale_attrs = get_hl_attrs(DEFAULT_STALE_HL) or {}
+  stale_attrs.bg = bg
+  stale_attrs.link = nil
+
+  vim.api.nvim_set_hl(0, CUSTOM_STALE_HL, stale_attrs)
+  M._hl.stale = CUSTOM_STALE_HL
 end
 
 local function configure_highlight_autocmd()
@@ -736,6 +839,19 @@ local function parse_virt_lines_pad_extra(raw)
   return clamp(math.floor(raw), 0, 16)
 end
 
+local function parse_query_stale_ms(raw)
+  if raw == nil then
+    return 500
+  end
+
+  if type(raw) ~= "number" then
+    vim.notify("swine.nvim: query_stale_ms must be a number", vim.log.levels.WARN)
+    return 500
+  end
+
+  return clamp(math.floor(raw), 0, MAX_TIMEOUT_MS)
+end
+
 local function parse_backend(raw)
   local backend, err = backend_registry.resolve(raw)
   if backend then
@@ -768,6 +884,7 @@ function M.setup(opts)
     max_solutions = clamp(opts.max_solutions or 50, 1, 500),
     load_timeout_ms = clamp(opts.load_timeout_ms or 4000, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
     query_timeout_ms = clamp(opts.query_timeout_ms or 4000, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
+    query_stale_ms = parse_query_stale_ms(opts.query_stale_ms),
     virt_lines_bg = virt_lines_bg,
     virt_lines_hl = parse_virt_lines_hl(opts.virt_lines_hl),
     virt_lines_overflow = parse_virt_lines_overflow(opts.virt_lines_overflow),

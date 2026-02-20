@@ -36,6 +36,7 @@ SETUP                                                        *swine-setup*
     max_solutions = 50,
     load_timeout_ms = 4000,
     query_timeout_ms = 4000,
+    query_stale_ms = 500,
     virt_lines_bg = "auto",
     virt_lines_hl = nil,
     virt_lines_overflow = "scroll",
@@ -158,6 +159,13 @@ load_timeout_ms                                           (number, 4000)
                                               *swine-query_timeout_ms*
 query_timeout_ms                                          (number, 4000)
         Timeout in milliseconds per inline query.
+
+                                                *swine-query_stale_ms*
+query_stale_ms                                            (number, 500)
+        Delay in milliseconds before dimming an existing query result cell
+        while that query is still pending in a newer run.
+
+        Set to 0 to disable stale-cell dimming.
 
                                                  *swine-virt_lines_bg*
 virt_lines_bg                                  (string|number|nil, "auto")

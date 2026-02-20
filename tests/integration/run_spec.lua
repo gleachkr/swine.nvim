@@ -4,6 +4,7 @@ swine.setup({
   run_on_save = false,
   load_timeout_ms = 3000,
   query_timeout_ms = 3000,
+  query_stale_ms = 500,
 })
 
 local function require_swipl(t)
@@ -81,6 +82,25 @@ local function find_mark_with_text(t, marks, needle)
   end
 
   return nil
+end
+
+local function first_virt_line_hl(mark)
+  local details = mark and mark[4]
+  if not details or not details.virt_lines then
+    return nil
+  end
+
+  local line = details.virt_lines[1]
+  if type(line) ~= "table" then
+    return nil
+  end
+
+  local chunk = line[1]
+  if type(chunk) ~= "table" then
+    return nil
+  end
+
+  return chunk[2]
 end
 
 return {
@@ -292,6 +312,121 @@ return {
         local moved = find_mark_by_id(moved_marks, mark_id)
         return moved ~= nil and moved[2] == 4
       end, 1000, 20, "expected query mark to follow split line")
+    end)
+  end,
+
+  ["long-running queries dim previous result cells"] = function(t)
+    require_swipl(t)
+
+    with_prolog_buffer(t, {
+      "q_item(first).",
+      "%? q_item(X).",
+    }, function(buf)
+      local original_system = vim.system
+      local query_calls = 0
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _opts, cb)
+        local has_query = false
+
+        for _, arg in ipairs(cmd) do
+          if arg == "--" then
+            has_query = true
+            break
+          end
+        end
+
+        local delay_ms = 10
+        local obj = {
+          code = 0,
+          stdout = "",
+          stderr = "",
+        }
+
+        if has_query then
+          query_calls = query_calls + 1
+          if query_calls == 1 then
+            obj.stdout = "PLNB_SOL 1 ['X'=first]\n"
+          else
+            delay_ms = 900
+            obj.stdout = "PLNB_SOL 1 ['X'=second]\n"
+          end
+        end
+
+        vim.defer_fn(function()
+          cb(obj)
+        end, delay_ms)
+
+        return {
+          wait = function()
+            return obj
+          end,
+        }
+      end
+
+      local ok, err = xpcall(function()
+        swine.run(buf)
+
+        local ns_qres = get_namespace("swine_qres")
+        t.ok(ns_qres ~= nil, "missing swine_qres namespace")
+
+        t.wait_for(function()
+          local marks = t.buf_extmarks(buf, ns_qres)
+          local mark = t.find_mark_by_lnum(marks, 1)
+          if not mark or not mark[4] or not mark[4].virt_lines then
+            return false
+          end
+
+          local text_lines = t.virt_lines_to_text(mark[4].virt_lines)
+          local joined = table.concat(text_lines, "\n")
+          return joined:find("X = first", 1, true) ~= nil
+        end, 2000, 20, "expected first query result")
+
+        swine.run(buf)
+
+        t.wait_for(function()
+          local marks = t.buf_extmarks(buf, ns_qres)
+          local mark = t.find_mark_by_lnum(marks, 1)
+          if not mark or not mark[4] or not mark[4].virt_lines then
+            return false
+          end
+
+          local text_lines = t.virt_lines_to_text(mark[4].virt_lines)
+          local joined = table.concat(text_lines, "\n")
+          if joined:find("X = first", 1, true) == nil then
+            return false
+          end
+
+          local group = first_virt_line_hl(mark)
+          return group == "SwineVirtStale" or group == "Comment"
+        end, 1500, 20, "expected stale query cell dimming")
+
+        t.wait_for(function()
+          local marks = t.buf_extmarks(buf, ns_qres)
+          local mark = t.find_mark_by_lnum(marks, 1)
+          if not mark or not mark[4] or not mark[4].virt_lines then
+            return false
+          end
+
+          local text_lines = t.virt_lines_to_text(mark[4].virt_lines)
+          local joined = table.concat(text_lines, "\n")
+          if joined:find("X = second", 1, true) == nil then
+            return false
+          end
+
+          local group = first_virt_line_hl(mark)
+          return group ~= "SwineVirtStale" and group ~= "Comment"
+        end, 2000, 20, "expected stale dimming to clear on completion")
+      end, debug.traceback)
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = original_system
+
+      if ok then
+        return
+      end
+
+      error(err, 0)
     end)
   end,
 

@@ -99,4 +99,18 @@ return {
     t.eq(swine._opts.backend, "swi")
     t.eq(swine._backend.id, "swi")
   end,
+
+  ["setup parses query_stale_ms option"] = function(t)
+    swine.setup({
+      query_stale_ms = 1234.7,
+    })
+
+    t.eq(swine._opts.query_stale_ms, 1234)
+
+    swine.setup({
+      query_stale_ms = -50,
+    })
+
+    t.eq(swine._opts.query_stale_ms, 0)
+  end,
 }
